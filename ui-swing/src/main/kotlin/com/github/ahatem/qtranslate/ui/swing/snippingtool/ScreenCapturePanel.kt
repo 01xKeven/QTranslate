@@ -15,7 +15,8 @@ class ScreenCapturePanel(
     private val onSaveImage: (BufferedImage) -> Unit,
     private val onRecrop: () -> Unit,
     private val onCancel: () -> Unit,
-    private val buttonLabels: ButtonLabels = ButtonLabels()
+    private val buttonLabels: ButtonLabels = ButtonLabels(),
+    private val buttonTooltips: ButtonTooltips = ButtonTooltips()
 ) : JLayeredPane() {
 
     data class ButtonLabels(
@@ -25,6 +26,15 @@ class ScreenCapturePanel(
         val saveImage: String  = "Save Image",
         val recrop: String     = "Re-crop",
         val cancel: String     = "Cancel"
+    )
+
+    data class ButtonTooltips(
+        val translate: String  = "OCR and translate the captured region",
+        val copyText: String   = "Recognize text and copy to clipboard",
+        val copyImage: String  = "Copy image to clipboard",
+        val saveImage: String  = "Save captured image as PNG",
+        val recrop: String     = "Clear selection and draw a new one",
+        val cancel: String     = "Close the capture tool"
     )
 
     private var currentState: ScreenCaptureState? = null
@@ -175,15 +185,15 @@ class ScreenCapturePanel(
             // "default" = filled accent button — primary action
             putClientProperty(FlatClientProperties.BUTTON_TYPE, "default")
             cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
-            toolTipText = "OCR and translate the captured region"
+            toolTipText = buttonTooltips.translate
             addActionListener { getSelectedImage()?.let(onTranslate) }
             alignmentY = Component.CENTER_ALIGNMENT
         }
-        val copyTextBtn  = flatBtn(buttonLabels.copyText,  "Recognize text and copy to clipboard")  { getSelectedImage()?.let(onCopyText)  }
-        val copyImageBtn = flatBtn(buttonLabels.copyImage, "Copy image to clipboard")                 { getSelectedImage()?.let(onCopyImage) }
-        val saveImageBtn = flatBtn(buttonLabels.saveImage, "Save captured image as PNG")              { getSelectedImage()?.let(onSaveImage) }
-        val recropBtn    = flatBtn(buttonLabels.recrop,    "Clear selection and draw a new one")      { onRecrop()    }
-        val cancelBtn    = flatBtn(buttonLabels.cancel,    "Close the capture tool")                  { onCancel()    }
+        val copyTextBtn  = flatBtn(buttonLabels.copyText,  buttonTooltips.copyText)  { getSelectedImage()?.let(onCopyText)  }
+        val copyImageBtn = flatBtn(buttonLabels.copyImage, buttonTooltips.copyImage) { getSelectedImage()?.let(onCopyImage) }
+        val saveImageBtn = flatBtn(buttonLabels.saveImage, buttonTooltips.saveImage) { getSelectedImage()?.let(onSaveImage) }
+        val recropBtn    = flatBtn(buttonLabels.recrop,    buttonTooltips.recrop)    { onRecrop()    }
+        val cancelBtn    = flatBtn(buttonLabels.cancel,    buttonTooltips.cancel)    { onCancel()    }
 
         return object : JPanel() {
             override fun paintComponent(g: Graphics) {
