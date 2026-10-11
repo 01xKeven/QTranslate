@@ -51,13 +51,10 @@ class SnippingToolDialog(
 
         val hotkeys = settingsStore.state.value.workingConfiguration.hotkeys
 
-        fun shortcutFor(action: HotkeyAction): String =
-            hotkeys.find { it.action == action && it.isEnabled }?.toDisplayString().orEmpty()
-
-        fun tooltipWithShortcut(base: String, action: HotkeyAction): String {
-            val sc = shortcutFor(action)
-            return if (sc.isNotEmpty()) "$base ($sc)" else base
-        }
+        fun shortcutFor(action: HotkeyAction): String? =
+            hotkeys.find { it.action == action && it.isEnabled }
+                ?.toDisplayString()
+                ?.takeIf { it.isNotEmpty() }
 
         val buttonLabels = ScreenCapturePanel.ButtonLabels(
             translate = localizer?.getString("settings_hotkeys.action_ocr_translate")?.takeIf { !it.startsWith("settings_hotkeys.") } ?: "Translate",
@@ -69,12 +66,12 @@ class SnippingToolDialog(
         )
 
         val buttonTooltips = ScreenCapturePanel.ButtonTooltips(
-            translate = tooltipWithShortcut("OCR and translate the captured region", HotkeyAction.OCR_TRANSLATE),
-            copyText  = tooltipWithShortcut("Recognize text and copy to clipboard", HotkeyAction.OCR_COPY_TEXT),
-            copyImage = tooltipWithShortcut("Copy image to clipboard", HotkeyAction.OCR_COPY_IMAGE),
-            saveImage = tooltipWithShortcut("Save captured image as PNG", HotkeyAction.OCR_SAVE_IMAGE),
-            recrop    = tooltipWithShortcut("Clear selection and draw a new one", HotkeyAction.OCR_RECROP),
-            cancel    = tooltipWithShortcut("Close the capture tool", HotkeyAction.OCR_CANCEL)
+            translate = shortcutFor(HotkeyAction.OCR_TRANSLATE),
+            copyText  = shortcutFor(HotkeyAction.OCR_COPY_TEXT),
+            copyImage = shortcutFor(HotkeyAction.OCR_COPY_IMAGE),
+            saveImage = shortcutFor(HotkeyAction.OCR_SAVE_IMAGE),
+            recrop    = shortcutFor(HotkeyAction.OCR_RECROP),
+            cancel    = shortcutFor(HotkeyAction.OCR_CANCEL)
         )
 
         panel = ScreenCapturePanel(
