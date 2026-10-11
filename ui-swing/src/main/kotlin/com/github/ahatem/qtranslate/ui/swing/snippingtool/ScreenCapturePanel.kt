@@ -29,12 +29,12 @@ class ScreenCapturePanel(
     )
 
     data class ButtonTooltips(
-        val translate: String  = "OCR and translate the captured region",
-        val copyText: String   = "Recognize text and copy to clipboard",
-        val copyImage: String  = "Copy image to clipboard",
-        val saveImage: String  = "Save captured image as PNG",
-        val recrop: String     = "Clear selection and draw a new one",
-        val cancel: String     = "Close the capture tool"
+        val translate: String? = null,
+        val copyText: String?  = null,
+        val copyImage: String? = null,
+        val saveImage: String? = null,
+        val recrop: String?    = null,
+        val cancel: String?    = null
     )
 
     private var currentState: ScreenCaptureState? = null
@@ -249,7 +249,7 @@ class ScreenCapturePanel(
     }
 
     /** Flat borderless toolbar-style button. */
-    private fun flatBtn(text: String, tooltip: String, action: () -> Unit): JButton =
+    private fun flatBtn(text: String, tooltip: String?, action: () -> Unit): JButton =
         JButton(text).apply {
             putClientProperty(FlatClientProperties.BUTTON_TYPE, "toolBarButton")
             cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
