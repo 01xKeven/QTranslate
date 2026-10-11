@@ -148,6 +148,13 @@ enum class ServiceSelectorStyle { CLASSIC, ENHANCED }
 @Serializable
 enum class ServiceSelectorAppearance { ICONS_ONLY, ICONS_AND_TEXT, TEXT_ONLY }
 
+/** Where to display OCR translation results. */
+@Serializable
+enum class OcrTranslationDestination {
+    POPUP,
+    MAIN_WINDOW
+}
+
 // -------------------------------------------------------------------------
 // Root configuration
 // -------------------------------------------------------------------------
@@ -218,6 +225,7 @@ data class Configuration(
      * Mohamed's request.
      */
     val isRemoveLineBreaksEnabled: Boolean = false,
+    val ocrTranslationDestination: OcrTranslationDestination = OcrTranslationDestination.POPUP,
     val translationRules: List<TranslationRule> = emptyList(),
 
     // ---- Language Preferences ----
