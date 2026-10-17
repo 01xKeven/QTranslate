@@ -21,7 +21,7 @@ class GoogleLensPlugin : Plugin<PluginSettings.None> {
 
     override suspend fun onEnable(): Result<Unit, ServiceError> {
         pluginContext.logger.info("Enabling Google Lens OCR service")
-        activeServices = listOf(GoogleLensOCRService(pluginContext))
+        activeServices = listOf(GoogleLensOCRService(pluginContext, pluginContext.http))
         return Ok(Unit)
     }
 

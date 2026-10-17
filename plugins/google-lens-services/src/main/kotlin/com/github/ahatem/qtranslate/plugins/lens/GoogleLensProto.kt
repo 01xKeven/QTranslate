@@ -4,34 +4,72 @@ import java.io.ByteArrayOutputStream
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.ThreadLocalRandom
 
+/**
+ * Result of parsing a Google Lens OCR response.
+ *
+ * @property text The extracted plain text with lines joined by newlines.
+ * @property language Detected BCP-47 language tag, if present in the response.
+ */
 data class LensOCRResult(
     val text: String,
     val language: String?
 )
 
+/**
+ * Lightweight, zero-dependency Protobuf wire encoder and decoder for Google Lens OCR.
+ *
+ * This is an original, from-scratch implementation created specifically for QTranslate
+ * and licensed under the project's Mozilla Public License 2.0 (MPL-2.0).
+ *
+ * ### Request and Response Schema
+ *
+ * The message structures correspond to the Chromium Lens overlay protobuf schema:
+ * - Request: `LensOverlayServerRequest`
+ *   - Field 1: `objects_request` (`LensOverlayObjectsRequest`)
+ *     - Field 1: `request_context` (`LensOverlayRequestContext`)
+ *       - Field 3: `request_id`
+ *       - Field 4: `client_context` (platform=WEB, surface=CHROMIUM, localeContext, filters, renderingContext)
+ *     - Field 3: `image_data` (`LensOverlayImageData`)
+ *       - Field 1: `payload` (raw image bytes)
+ *       - Field 3: `image_metadata` (dimensions width, height)
+ *
+ * - Response: `LensOverlayServerResponse`
+ *   - Field 2: `objects_response` (`LensOverlayObjectsResponse`)
+ *     - Field 3: `text` (`Text`)
+ *       - Field 1: `text_layout` (`TextLayout`)
+ *         - Field 1: `paragraphs` (repeated `Paragraph`)
+ *           - Field 2: `lines` (repeated `Line`)
+ *             - Field 1: `words` (repeated `Word`)
+ *               - Field 2: `plain_text` (string, the word text)
+ *               - Field 3: `text_separator` (string, e.g. " ")
+ *       - Field 2: `content_language` (string, detected BCP-47 language tag)
+ */
 object GoogleLensProto {
 
+    /**
+     * Builds the serialized binary Protobuf payload for the Google Lens `crupload` endpoint.
+     */
     fun buildRequest(
         imageBytes: ByteArray,
         width: Int,
         height: Int,
         language: String
     ): ByteArray {
-        // Build requestId
+        // Build requestId (field 3 of requestContext)
         val requestId = ByteArrayOutputStream().apply {
             writeVarint(1, 0, ThreadLocalRandom.current().nextLong(1L, Long.MAX_VALUE))
             writeVarint(2, 0, 1L)
             writeVarint(3, 0, 1L)
         }.toByteArray()
 
-        // Build localeContext
+        // Build localeContext (field 4 of clientContext)
         val localeContext = ByteArrayOutputStream().apply {
             writeLengthDelimited(1, language.toByteArray(StandardCharsets.UTF_8))
             writeLengthDelimited(2, "US".toByteArray(StandardCharsets.UTF_8))
             writeLengthDelimited(3, "America/New_York".toByteArray(StandardCharsets.UTF_8))
         }.toByteArray()
 
-        // Build clientFilters
+        // Build clientFilters (field 17 of clientContext)
         val filter = ByteArrayOutputStream().apply {
             writeVarint(1, 0, 1L) // AUTO_FILTER = 1
         }.toByteArray()
@@ -39,12 +77,12 @@ object GoogleLensProto {
             writeLengthDelimited(1, filter)
         }.toByteArray()
 
-        // Build renderingContext
+        // Build renderingContext (field 20 of clientContext)
         val renderingContext = ByteArrayOutputStream().apply {
             writeVarint(2, 0, 1L) // RENDERING_ENV_LENS_OVERLAY = 1
         }.toByteArray()
 
-        // Build clientContext
+        // Build clientContext (field 4 of requestContext)
         val clientContext = ByteArrayOutputStream().apply {
             writeVarint(1, 0, 1L) // PLATFORM_WEB = 1
             writeVarint(2, 0, 1L) // SURFACE_CHROMIUM = 1
@@ -53,30 +91,30 @@ object GoogleLensProto {
             writeLengthDelimited(20, renderingContext)
         }.toByteArray()
 
-        // Build requestContext
+        // Build requestContext (field 1 of objectsRequest)
         val requestContext = ByteArrayOutputStream().apply {
             writeLengthDelimited(3, requestId)
             writeLengthDelimited(4, clientContext)
         }.toByteArray()
 
-        // Build payload
+        // Build payload containing the raw image bytes (field 1 of imageData)
         val payload = ByteArrayOutputStream().apply {
             writeLengthDelimited(1, imageBytes)
         }.toByteArray()
 
-        // Build imageMetadata
+        // Build imageMetadata with image dimensions (field 3 of imageData)
         val imageMetadata = ByteArrayOutputStream().apply {
             writeVarint(1, 0, width.toLong())
             writeVarint(2, 0, height.toLong())
         }.toByteArray()
 
-        // Build imageData
+        // Build imageData (field 3 of objectsRequest)
         val imageData = ByteArrayOutputStream().apply {
             writeLengthDelimited(1, payload)
             writeLengthDelimited(3, imageMetadata)
         }.toByteArray()
 
-        // Build objectsRequest
+        // Build objectsRequest (field 1 of serverRequest)
         val objectsRequest = ByteArrayOutputStream().apply {
             writeLengthDelimited(1, requestContext)
             writeLengthDelimited(3, imageData)
@@ -88,46 +126,71 @@ object GoogleLensProto {
         }.toByteArray()
     }
 
-    private data class RawField(val fieldNumber: Int, val wireType: Int, val varintValue: Long, val bytesValue: ByteArray)
+    internal data class RawField(val fieldNumber: Int, val wireType: Int, val varintValue: Long, val bytesValue: ByteArray)
 
-    private fun parseRawFields(data: ByteArray): List<RawField> {
+    internal fun parseRawFields(data: ByteArray): List<RawField> {
         val result = mutableListOf<RawField>()
         var idx = 0
         while (idx < data.size) {
             var shift = 0
             var tagRaw = 0
+            var tagValid = false
             while (idx < data.size) {
                 val b = data[idx++].toInt() and 0xFF
                 tagRaw = tagRaw or ((b and 0x7F) shl shift)
-                if ((b and 0x80) == 0) break
+                if ((b and 0x80) == 0) {
+                    tagValid = true
+                    break
+                }
                 shift += 7
+                if (shift > 35) break // Prevent overflow on corrupt stream
             }
+            if (!tagValid) break
+
             val fieldNumber = tagRaw ushr 3
             val wireType = tagRaw and 0x07
             when (wireType) {
                 0 -> { // Varint
                     var v = 0L
                     shift = 0
+                    var varintValid = false
                     while (idx < data.size) {
                         val b = data[idx++].toInt() and 0xFF
                         v = v or ((b.toLong() and 0x7FL) shl shift)
-                        if ((b and 0x80) == 0) break
+                        if ((b and 0x80) == 0) {
+                            varintValid = true
+                            break
+                        }
                         shift += 7
+                        if (shift > 70) break
                     }
-                    result.add(RawField(fieldNumber, wireType, v, ByteArray(0)))
+                    if (varintValid) {
+                        result.add(RawField(fieldNumber, wireType, v, ByteArray(0)))
+                    } else {
+                        break
+                    }
                 }
-                1 -> { // 64-bit
-                    idx += 8
+                1 -> { // 64-bit fixed
+                    if (idx + 8 <= data.size) {
+                        idx += 8
+                    } else break
                 }
-                2 -> { // Length-delimited
+                2 -> { // Length-delimited (sub-messages, strings, byte arrays)
                     var len = 0
                     shift = 0
+                    var lenValid = false
                     while (idx < data.size) {
                         val b = data[idx++].toInt() and 0xFF
                         len = len or ((b and 0x7F) shl shift)
-                        if ((b and 0x80) == 0) break
+                        if ((b and 0x80) == 0) {
+                            lenValid = true
+                            break
+                        }
                         shift += 7
+                        if (shift > 35) break
                     }
+                    if (!lenValid || len < 0) break
+
                     if (idx + len <= data.size) {
                         val bytes = data.copyOfRange(idx, idx + len)
                         idx += len
@@ -136,16 +199,37 @@ object GoogleLensProto {
                         break
                     }
                 }
-                5 -> { // 32-bit
-                    idx += 4
+                5 -> { // 32-bit fixed
+                    if (idx + 4 <= data.size) {
+                        idx += 4
+                    } else break
                 }
-                else -> break
+                else -> break // Unknown wire type or malformed data
             }
         }
         return result
     }
 
+    /**
+     * Decodes the binary Protobuf response from Google Lens `crupload` into plain text
+     * and detected language.
+     *
+     * Traversal hierarchy:
+     * - Field 2: `objects_response`
+     *   - Field 3: `text`
+     *     - Field 1: `text_layout`
+     *       - Field 1: `paragraphs`
+     *         - Field 2: `lines`
+     *           - Field 1: `words`
+     *             - Field 2: `plain_text`
+     *             - Field 3: `text_separator` (default " ")
+     *     - Field 2: `content_language` (detected language code)
+     */
     fun parseResponse(responseBytes: ByteArray): LensOCRResult {
+        if (responseBytes.isEmpty()) {
+            return LensOCRResult(text = "", language = null)
+        }
+
         val fullLines = mutableListOf<String>()
         var detectedLang: String? = null
 
@@ -158,7 +242,7 @@ object GoogleLensProto {
                         val textFields = parseRawFields(fObj.bytesValue)
                         for (fText in textFields) {
                             if (fText.fieldNumber == 2 && fText.wireType == 2) { // content_language
-                                detectedLang = String(fText.bytesValue, StandardCharsets.UTF_8).trim()
+                                detectedLang = String(fText.bytesValue, StandardCharsets.UTF_8).trim().ifBlank { null }
                             } else if (fText.fieldNumber == 1 && fText.wireType == 2) { // text_layout
                                 val layoutFields = parseRawFields(fText.bytesValue)
                                 for (fLayout in layoutFields) {
@@ -216,7 +300,7 @@ object GoogleLensProto {
         write((v and 0x7F).toInt())
     }
 
-    private fun ByteArrayOutputStream.writeLengthDelimited(fieldNumber: Int, bytes: ByteArray) {
+    internal fun ByteArrayOutputStream.writeLengthDelimited(fieldNumber: Int, bytes: ByteArray) {
         writeTag(fieldNumber, 2)
         var len = bytes.size
         while (len and 0x7F.inv() != 0) {

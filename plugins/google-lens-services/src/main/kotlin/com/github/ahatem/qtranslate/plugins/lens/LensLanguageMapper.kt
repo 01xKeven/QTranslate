@@ -36,13 +36,20 @@ object LensLanguageMapper : LanguageMapper {
     override fun fromProviderCode(providerCode: String): LanguageCode {
         val standardTag = providerToStandardMap[providerCode] ?: providerCode
         return try {
-            LanguageCode(standardTag)
+            val candidate = LanguageCode(standardTag)
+            if (candidate in supportedLanguagesSet) {
+                candidate
+            } else {
+                val baseCode = standardTag.split('-', '_').first()
+                val baseCandidate = LanguageCode(baseCode)
+                if (baseCandidate in supportedLanguagesSet) baseCandidate else candidate
+            }
         } catch (_: Exception) {
-            val baseCode = standardTag.split("-", "_")[0]
+            val baseCode = standardTag.split('-', '_').first()
             try {
                 LanguageCode(baseCode)
             } catch (_: Exception) {
-                LanguageCode("en")
+                LanguageCode.ENGLISH
             }
         }
     }

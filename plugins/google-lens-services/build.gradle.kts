@@ -8,6 +8,8 @@ dependencies {
     implementation(project(":plugins:common"))
 
     testImplementation(kotlin("test"))
+    testImplementation(testFixtures(project(":plugins:common")))
+    testImplementation(libs.kotlinxCoroutines)
 }
 
 tasks.shadowJar {
