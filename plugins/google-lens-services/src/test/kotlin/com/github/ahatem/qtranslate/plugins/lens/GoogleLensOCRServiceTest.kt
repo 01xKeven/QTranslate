@@ -111,6 +111,78 @@ class GoogleLensOCRServiceTest {
     }
 
     @Test
+    fun `extractText sends bundled key when no override is configured`() = runBlocking {
+        val fixture = buildResponseFixture(listOf("Hello"), language = "en")
+        val fakeHttp = FakeLensHttpClient(Ok(fixture))
+        val context = FakePluginContext(httpClient = fakeHttp)
+        val service = GoogleLensOCRService(context, fakeHttp) { GoogleLensSettings() }
+
+        service.extractText(OCRRequest(sampleImage, LanguageCode.AUTO)).getOrThrow { AssertionError(it.message) }
+
+        assertEquals(
+            GoogleLensOCRService.DEFAULT_LENS_API_KEY,
+            fakeHttp.lastPostedHeaders?.get("X-Goog-Api-Key")
+        )
+    }
+
+    @Test
+    fun `extractText sends custom key when override is configured`() = runBlocking {
+        val fixture = buildResponseFixture(listOf("Hello"), language = "en")
+        val fakeHttp = FakeLensHttpClient(Ok(fixture))
+        val context = FakePluginContext(httpClient = fakeHttp)
+        val service = GoogleLensOCRService(context, fakeHttp) { GoogleLensSettings(apiKey = "custom-key") }
+
+        service.extractText(OCRRequest(sampleImage, LanguageCode.AUTO)).getOrThrow { AssertionError(it.message) }
+
+        assertEquals("custom-key", fakeHttp.lastPostedHeaders?.get("X-Goog-Api-Key"))
+    }
+
+    @Test
+    fun `extractText trims override and falls back on whitespace-only value`() = runBlocking {
+        val fixture = buildResponseFixture(listOf("Hello"), language = "en")
+        val fakeHttp = FakeLensHttpClient(Ok(fixture))
+        val context = FakePluginContext(httpClient = fakeHttp)
+        var current = GoogleLensSettings(apiKey = "   ")
+        val service = GoogleLensOCRService(context, fakeHttp) { current }
+
+        service.extractText(OCRRequest(sampleImage, LanguageCode.AUTO)).getOrThrow { AssertionError(it.message) }
+        assertEquals(
+            GoogleLensOCRService.DEFAULT_LENS_API_KEY,
+            fakeHttp.lastPostedHeaders?.get("X-Goog-Api-Key")
+        )
+
+        current = GoogleLensSettings(apiKey = "  custom-key  ")
+        service.extractText(OCRRequest(sampleImage, LanguageCode.AUTO)).getOrThrow { AssertionError(it.message) }
+        assertEquals("custom-key", fakeHttp.lastPostedHeaders?.get("X-Goog-Api-Key"))
+
+        current = GoogleLensSettings(apiKey = "")
+        service.extractText(OCRRequest(sampleImage, LanguageCode.AUTO)).getOrThrow { AssertionError(it.message) }
+        assertEquals(
+            GoogleLensOCRService.DEFAULT_LENS_API_KEY,
+            fakeHttp.lastPostedHeaders?.get("X-Goog-Api-Key")
+        )
+    }
+
+    @Test
+    fun `extractText picks up settings change without service restart`() = runBlocking {
+        val fixture = buildResponseFixture(listOf("Hello"), language = "en")
+        val fakeHttp = FakeLensHttpClient(Ok(fixture))
+        val context = FakePluginContext(httpClient = fakeHttp)
+        var current = GoogleLensSettings()
+        val service = GoogleLensOCRService(context, fakeHttp) { current }
+
+        service.extractText(OCRRequest(sampleImage, LanguageCode.AUTO)).getOrThrow { AssertionError(it.message) }
+        assertEquals(
+            GoogleLensOCRService.DEFAULT_LENS_API_KEY,
+            fakeHttp.lastPostedHeaders?.get("X-Goog-Api-Key")
+        )
+
+        current = GoogleLensSettings(apiKey = "rotated-key")
+        service.extractText(OCRRequest(sampleImage, LanguageCode.AUTO)).getOrThrow { AssertionError(it.message) }
+        assertEquals("rotated-key", fakeHttp.lastPostedHeaders?.get("X-Goog-Api-Key"))
+    }
+
+    @Test
     fun `extractText returns recognized text and detected language on valid response`() = runBlocking {
         val fixture = buildResponseFixture(listOf("Hello World", "Line two"), language = "en")
         val fakeHttp = FakeLensHttpClient(Ok(fixture))

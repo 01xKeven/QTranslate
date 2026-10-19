@@ -17,7 +17,8 @@ import kotlinx.coroutines.withContext
 
 class GoogleLensOCRService(
     private val pluginContext: PluginContext,
-    private val httpClient: HttpClient = pluginContext.http
+    private val httpClient: HttpClient = pluginContext.http,
+    private val settings: () -> GoogleLensSettings = { GoogleLensSettings() }
 ) : OCR {
 
     override val key: String = "google-lens-ocr"
@@ -34,9 +35,14 @@ class GoogleLensOCRService(
 
         // Public client key used by Chromium for Lens overlay; see Chromium source tree:
         // https://source.chromium.org/chromium/chromium/src/+/main:components/lens/lens_features.cc
-        private const val LENS_API_KEY = "AIzaSyDr2UxVnv_U85AbhhY8XSHSIavUW0DC-sY"
+        internal const val DEFAULT_LENS_API_KEY = "AIzaSyDr2UxVnv_U85AbhhY8XSHSIavUW0DC-sY"
 
         private const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
+    }
+
+    internal fun resolveApiKey(): String {
+        val override = settings().apiKey.trim()
+        return override.ifBlank { DEFAULT_LENS_API_KEY }
     }
 
     override suspend fun fetchSupportedLanguages(): Result<Set<LanguageCode>, ServiceError> =
@@ -67,7 +73,7 @@ class GoogleLensOCRService(
 
             val headers = mapOf(
                 "Content-Type" to "application/x-protobuf",
-                "X-Goog-Api-Key" to LENS_API_KEY,
+                "X-Goog-Api-Key" to resolveApiKey(),
                 "User-Agent" to USER_AGENT,
                 "Accept" to "*/*"
             )
